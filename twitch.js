@@ -132,7 +132,12 @@ const getClipboard = () => {
     });
 };
 
-const main = async () => {
+const extractIdFromLink = (input, regexPattern) => {
+    const match = input.match(regexPattern);
+    return match ? match[1] : '';
+};
+
+const getTwitchContent = async () => {
     try {
         const clipboardContent = await getClipboard();
 
@@ -141,55 +146,42 @@ const main = async () => {
             process.exit(1);
         }
 
-        // Use the clipboard content as the input variable
-        const input = clipboardContent;
+        let videoId = '';
+        let channel = '';
+
+        if (clipboardContent.includes('/videos/') || clipboardContent.includes('video=')) {
+            videoId = extractIdFromLink(clipboardContent, /(?:\/videos\/|video=)(\d+)/);
+        } else if (clipboardContent.includes('twitch.tv/') || clipboardContent.includes('channel=')) {
+            channel = extractIdFromLink(clipboardContent, /(?:twitch\.tv\/|channel=)([^&?/]+)/);
+        }
+
+        if (videoId) {
+            return twitch.getVod(videoId);
+        } else if (channel) {
+            return twitch.getStream(channel);
+        } else {
+            console.error('Invalid Twitch link. Please provide a valid Twitch stream or VOD link.');
+            process.exit(1);
+        }
     } catch (error) {
         console.error('Error reading from clipboard:', error);
         process.exit(1);
     }
 };
 
-let videoId = '';
-let channel = '';
+const main = async () => {
+    try {
+        const twitchContent = await getTwitchContent();
 
-if (input.includes('/videos/') || input.includes('video=')) {
-  const regexVideoId = /(?:\/videos\/|video=)(\d+)/;
-  const match = input.match(regexVideoId);
-  if (match) {
-    videoId = match[1];
-  }
-} else if (input.includes('twitch.tv/') || input.includes('channel=')) {
-  const regexChannel = /(?:twitch\.tv\/|channel=)([^&?/]+)/;
-  const match = input.match(regexChannel);
-  if (match) {
-    channel = match[1];
-  }
-}
-
-if (videoId) {
-  twitch.getVod(videoId)
-    .then((data) => {
-      const qualitySource = data.find(stream => stream.quality.toLowerCase().includes('source'));
-      if (qualitySource) {
-        console.log(qualitySource.url);
-      } else {
-        console.error('Source version not found.');
-      }
-    })
-    .catch((err) => console.error(err));
-} else if (channel) {
-  twitch.getStream(channel)
-    .then((data) => {
-      const qualitySource = data.find(stream => stream.quality.toLowerCase().includes('source'));
-      if (qualitySource) {
-        console.log(qualitySource.url);
-      } else {
-        console.error('Source version not found.');
-      }
-    })
-    .catch((err) => console.error(err));
-} else {
-  console.error('Invalid Twitch link. Please provide a valid Twitch stream or VOD link.');
-}
+        const qualitySource = twitchContent.find(stream => stream.quality.toLowerCase().includes('source'));
+        if (qualitySource) {
+            console.log(qualitySource.url);
+        } else {
+            console.error('Source version not found.');
+        }
+    } catch (err) {
+        console.error(err);
+    }
+};
 
 main();
